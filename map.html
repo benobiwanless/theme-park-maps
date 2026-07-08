@@ -225,13 +225,11 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        // Create the map container
         const map = L.map('map', {
             zoomControl: true,
             fadeAnimation: true
         }).setView([28.4178, -81.5812], 14);
 
-        // Switch to CartoDB Voyager Map Tiles (Highly optimized CDN for clean web apps)
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             maxZoom: 20,
             attribution: '© OpenStreetMap, © CARTO'
@@ -247,116 +245,10 @@
             const parkLat = parseFloat(selectedOption.getAttribute('data-lat'));
             const parkLng = parseFloat(selectedOption.getAttribute('data-lng'));
             
-            // Pan directly to the target location
             map.flyTo([parkLat, parkLng], 15, { animate: true, duration: 1.5 });
             
             markerLayerGroup.clearLayers();
-            cardsContainer.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">Syncing active feeds...</div>';
+            cardsContainer.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">Syncing locations and live queues...</div>';
 
             try {
-                // Fetch active live tracking data structure
-                const liveResponse = await fetch(`https://api.themeparks.wiki/v1/entity/${parkId}/live`);
-                const liveData = await liveResponse.json();
-
-                if (!liveData || !liveData.liveData) {
-                    cardsContainer.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">No live attraction data found.</div>';
-                    return;
-                }
-
-                const rides = liveData.liveData.filter(item => item.entityType === "ATTRACTION");
-                if (rides.length === 0) {
-                    cardsContainer.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">No rides active right now.</div>';
-                    return;
-                }
-
-                // Sort alphabetical 
-                rides.sort((a, b) => a.name.localeCompare(b.name));
-                cardsContainer.innerHTML = '';
-
-                rides.forEach((ride, index) => {
-                    let waitText = "-";
-                    let colorClass = "bg-closed";
-                    let statusLabel = "Closed";
-                    
-                    const isOperating = ride.status === "OPERATING";
-                    const standbyWait = ride.queue?.STANDBY?.waitTime;
-
-                    if (isOperating && standbyWait !== undefined && standbyWait !== null) {
-                        waitText = standbyWait;
-                        statusLabel = `${standbyWait} min`;
-                        if (standbyWait <= 15) colorClass = "bg-green";
-                        else if (standbyWait <= 30) colorClass = "bg-yellow";
-                        else colorClass = "bg-red";
-                    } else if (ride.status === "DOWN") {
-                        waitText = "✖";
-                        colorClass = "bg-red";
-                        statusLabel = "DOWN";
-                    }
-
-                    // Spread pins out dynamically around center coordinate layout grid 
-                    const angle = (index / rides.length) * 2 * Math.PI;
-                    const radius = 0.0035; 
-                    const rideLat = parkLat + (Math.sin(angle) * radius);
-                    const rideLng = parkLng + (Math.cos(angle) * radius);
-
-                    // Drop Leaflet circle numerical pin
-                    const customIcon = L.divIcon({
-                        className: `custom-pin ${colorClass}`,
-                        html: `<span>${waitText}</span>`,
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15]
-                    });
-
-                    const marker = L.marker([rideLat, rideLng], { icon: customIcon });
-                    marker.bindPopup(`
-                        <div class="popup-title">${ride.name}</div>
-                        <div style="font-size:12px; color:#555;">Wait Time: <b>${statusLabel}</b></div>
-                    `);
-                    
-                    markerLayerGroup.addLayer(marker);
-
-                    // Generate Linked Sidebar Item Card
-                    const card = document.createElement('div');
-                    card.className = 'ride-sidebar-card';
-                    card.id = `card-${ride.id}`;
-                    card.innerHTML = `
-                        <span class="card-name">${ride.name}</span>
-                        <span class="card-badge ${colorClass}">${statusLabel}</span>
-                    `;
-
-                    // Link Click action 1: Card click flashes pin popup 
-                    card.addEventListener('click', () => {
-                        document.querySelectorAll('.ride-sidebar-card').forEach(c => c.classList.remove('active-highlight'));
-                        card.classList.add('active-highlight');
-                        map.setView([rideLat, rideLng], 16);
-                        marker.openPopup();
-                    });
-
-                    // Link Click action 2: Pin click snaps down to sidebar view card
-                    marker.on('click', () => {
-                        document.querySelectorAll('.ride-sidebar-card').forEach(c => c.classList.remove('active-highlight'));
-                        const matchingCard = document.getElementById(`card-${ride.id}`);
-                        if (matchingCard) {
-                            matchingCard.classList.add('active-highlight');
-                            matchingCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                        }
-                    });
-
-                    cardsContainer.appendChild(card);
-                });
-
-            } catch (error) {
-                console.error(error);
-                cardsContainer.innerHTML = '<div style="padding:20px; color:var(--status-red);">Failed syncing live data feeds.</div>';
-            }
-        }
-
-        parkSelectDropdown.addEventListener('change', updateMapAndSidebar);
-        
-        // Initial setup sweep to enforce canvas loading instantly
-        setTimeout(updateMapAndSidebar, 300);
-    });
-</script>
-
-</body>
-</html>
+                // Fetch BOTH live wait times and structural
