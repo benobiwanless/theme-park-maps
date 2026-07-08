@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orlando Live Ride Map Tracker</title>
+    
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --panel-bg: #ffffff;
+            --status-green: #2ec4b6;
+            --status-yellow: #ff9f1c;
+            --status-red: #e71d36;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+        }
+
+        #app-layout {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background: #111;
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        header h1 { margin: 0; font-size: 18px; }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        select {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            background: #fff;
+            border: none;
+        }
+
+        /* Map occupies the core viewport */
+        #map {
+            flex-grow: 1;
+            width: 100%;
+            z-index: 1;
+        }
+
+        /* Custom Map Pin CSS */
+        .custom-pin {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 32px !important;
+            height: 32px !important;
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            font-size: 11px;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            text-shadow: 1px 1px 0px rgba(0,0,0,0.5);
+        }
+
+        .bg-green { background-color: var(--status-green); }
+        .bg-yellow { background-color: var(--status-yellow); }
+        .bg-red { background-color: var(--status-red); }
+        .bg-closed { background-color: #555555; }
+
+        /* Popup Box Styles */
+        .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+            padding: 4px;
+        }
+        .popup-title {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        .popup-status {
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app-layout">
+    <header>
+        <h1>Orlando Live Ride Map</h1>
+        <div class="controls">
+            <select id="parkSelect">
+                <option value="75ea578a-adc8-4116-a54d-dccb60765ef9" data-lat="28.4178" data-lng="-81.5812">Magic Kingdom</option>
+                <option value="47f90d2c-e191-4239-a466-5892ef59a88b" data-lat="28.3710" data-lng="-81.5494">EPCOT</option>
+                <option value="288747d1-8b4f-4a64-867e-ea7c9b27bad8" data-lat="28.3575" data-lng="-81.5583">Hollywood Studios</option>
+                <option value="1c84a229-8862-4648-9c71-378ddd2c7693" data-lat="28.3529" data-lng="-81.5907">Animal Kingdom</option>
+                <option value="eb3f4560-2383-4a36-9152-6b3e5ed6bc57" data-lat="28.4748" data-lng="-81.4671">Universal Studios Florida</option>
+                <option value="267615cc-8943-4c2a-ae2c-5da728ca591f" data-lat="28.4712" data-lng="-81.4715">Islands of Adventure</option>
+                <option value="12dbb85b-265f-44e6-bccf-f1faa17211fc" data-lat="28.4422" data-lng="-81.4490">Epic Universe</option>
+            </select>
+        </div>
+    </header>
+
+    <div id="map"></div>
+</div>
+
+<!-- Leaflet Map JS Engine -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+    // Initialize Orlando Map Center
+    const map = L.map('map').setView([28.4178, -81.5812], 14);
+
+    // Apply clean OpenStreetMap map tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Marker Layer Group for clean clear/refresh states
+    let markerLayerGroup = L.layerGroup().addTo(map);
+
+    async function updateMapPins() {
+        const selector = document.getElementById('parkSelect');
+        const parkId = selector.value;
+        
+        // Pan map view smoothly to selected park coordinates
+        const selectedOption = selector.options[selector.selectedIndex];
+        const lat = parseFloat(selectedOption.getAttribute('data-lat'));
+        const lng = parseFloat(selectedOption.getAttribute('data-lng'));
+        map.flyTo([lat, lng], 15);
+
+        // Clear existing markers from previous renders
+        markerLayerGroup.clearLayers();
+
+        try {
+            // Pull static details to grab geolocation coordinates
+            const detailsResponse = await fetch(`https://api.themeparks.wiki/v1/entity/${parkId}`);
+            const detailsData = await detailsResponse.json();
+
+            // Pull live wait time details
+            const liveResponse = await fetch(`https://api.themeparks.wiki/v1/entity/${parkId}/live`);
+            const liveData = await liveResponse.json();
+
+            // Build a quick lookup dictionary mapping entityId to wait times
+            const waitTimeMap = {};
+            if (liveData && liveData.liveData) {
+                liveData.liveData.forEach(item => {
+                    if (item.entityType === "ATTRACTION") {
+                        waitTimeMap[item.id] = item;
+                    }
+                });
+            }
+
+            // Iterate and drop pinholes for rides containing valid coordinates
+            if (detailsData && detailsData.children) {
+                detailsData.children.forEach(ride => {
+                    if (ride.entityType === "ATTRACTION" && ride.location) {
+                        const rideLat = ride.location.latitude;
+                        const rideLng = ride.location.longitude;
+                        
+                        const liveStatus = waitTimeMap[ride.id];
+                        let waitText = "-";
+                        let colorClass = "bg-closed";
+                        let description = "Status: Closed / Closed Feed";
+
+                        if (liveStatus) {
+                            const isOperating = liveStatus.status === "OPERATING";
+                            const standbyWait = liveStatus.queue?.STANDBY?.waitTime;
+
+                            if (isOperating && standbyWait !== undefined && standbyWait !== null) {
+                                waitText = standbyWait;
+                                if (standbyWait <= 15) colorClass = "bg-green";
+                                else if (standbyWait <= 30) colorClass = "bg-yellow";
+                                else colorClass = "bg-red";
+                                description = `Standby Wait: <b>${standbyWait} mins</b>`;
+                            } else if (liveStatus.status === "DOWN") {
+                                waitText = "✖";
+                                colorClass = "bg-red";
+                                description = `Status: Temporarily Down`;
+                            } else {
+                                description = `Status: ${liveStatus.status || 'Closed'}`;
+                            }
+                        }
+
+                        // Create custom circular DOM node for Leaflet map pin
+                        const customIcon = L.divIcon({
+                            className: `custom-pin ${colorClass}`,
+                            html: `<span>${waitText}</span>`,
+                            iconSize: [32, 32],
+                            iconAnchor: [16, 16]
+                        });
+
+                        // Append pinhole marker to map layer
+                        const marker = L.marker([rideLat, rideLng], { icon: customIcon });
+                        marker.bindPopup(`
+                            <div class="popup-title">${ride.name}</div>
+                            <div class="popup-status">${description}</div>
+                        `);
+                        markerLayerGroup.addLayer(marker);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error("Failed pulling interactive spatial coordinate feeds:", error);
+        }
+    }
+
+    // Attach listener triggers
+    document.getElementById('parkSelect').addEventListener('change', updateMapPins);
+
+    // Initial run on boot
+    updateMapPins();
+</script>
+
+</body>
+</html>
