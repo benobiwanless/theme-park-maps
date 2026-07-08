@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="https://unpkg.com" crossorigin="" />
     <script src="https://unpkg.com" crossorigin=""></script>
     <style>
-        /* Force the browser body and map container to fully expand */
         html, body { 
             margin: 0; 
             padding: 0; 
@@ -20,49 +19,73 @@
         #map { 
             width: 100%; 
             height: 100%; 
-            background-color: #aad3df; /* Temporary background while map loads */
+            background-color: #aad3df; 
         }
         .wait-label { font-weight: bold; text-align: center; }
+        /* Real-time screen debugger panel */
+        #debug-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.85);
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 11px;
+            max-width: 300px;
+            z-index: 1000;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
 
     <div id="map"></div>
+    <div id="debug-panel">Status: Starting map...</div>
 
     <script>
-        // 1. Initialize the map centered near Orlando theme parks
+        // Setup simple onscreen console debugger
+        const debugEl = document.getElementById('debug-panel');
+        function logStatus(msg) { debugEl.innerHTML = "Status: " + msg; console.log(msg); }
+
+        // 1. Initialize Leaflet Map
+        logStatus("Initializing map viewport...");
         const map = L.map('map').setView([28.4176, -81.5812], 13);
 
-        // 2. Load open-source map graphics from OpenStreetMap
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        // 2. Load Alternative Highly-Stable Map Graphics (CartoDB Voyager)
+        logStatus("Loading base map tiles...");
+        L.tileLayer('https://{s}://{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
+            attribution: '© OpenStreetMap, © CartoDB'
         }).addTo(map);
 
-        // 3. Define your ride database with coordinates and Queue-Times API IDs
+        // 3. Complete Ride Database Array
         const ridesDatabase = [
             { name: "Space Mountain", lat: 28.4192, lon: -81.5771, parkId: 6, apiId: 472 },
             { name: "Seven Dwarfs Mine Train", lat: 28.4202, lon: -81.5803, parkId: 6, apiId: 473 },
             { name: "Big Thunder Mountain", lat: 28.4211, lon: -81.5847, parkId: 6, apiId: 466 },
-            { name: "Guardians of the Galaxy: Cosmic Rewind", lat: 28.3748, lon: -81.5501, parkId: 5, apiId: 16183 },
+            { name: "Guardians of the Galaxy", lat: 28.3748, lon: -81.5501, parkId: 5, apiId: 16183 },
             { name: "Hagrid's Motorbike Adventure", lat: 28.4728, lon: -81.4711, parkId: 64, apiId: 4578 },
             { name: "VelociCoaster", lat: 28.4721, lon: -81.4729, parkId: 64, apiId: 15335 }
         ];
 
-        // 4. Fetch live wait times grouped by unique Park IDs
+        // 4. Fetch Live Data Using Proxy
         async function loadWaitTimes() {
+            logStatus("Connecting to live API proxy...");
             const uniqueParkIds = [...new Set(ridesDatabase.map(ride => ride.parkId))];
             const liveData = {};
 
             for (const parkId of uniqueParkIds) {
                 try {
-                    // FIXED: Wrapping the URL with a free CORS proxy to avoid browser blocking
-                    const targetUrl = `https://queue-times.com{parkId}/queue_times.json`;
+                    const targetUrl = `https://queue-times.com/parks/${parkId}/queue_times.json`;
+                    // Updated proxy route fallback
                     const response = await fetch(`https://corsproxy.io{encodeURIComponent(targetUrl)}`);
+                    
+                    if (!response.ok) throw new Error("Network response failed");
                     const data = await response.json();
                     
-                    // Flatten the API's land structure into a simple ID lookup dictionary
-                    if (data.lands) {
+                    if (data && data.lands) {
                         data.lands.forEach(land => {
                             land.rides.forEach(ride => {
                                 liveData[ride.id] = {
@@ -73,20 +96,21 @@
                         });
                     }
                 } catch (error) {
-                    console.error(`Failed to fetch wait times for park ${parkId}:`, error);
+                    logStatus("API Error on Park " + parkId + " - Plotting static pins instead.");
+                    console.error(error);
                 }
             }
 
-            // 5. Plot the coordinates onto the map with live API data
+            // 5. Render Map Pins on Screen
+            logStatus("Plotting markers on map...");
             ridesDatabase.forEach(ride => {
                 const liveRide = liveData[ride.apiId];
-                let statusText = "No Data";
+                let statusText = "No live data";
                 
                 if (liveRide) {
                     statusText = liveRide.isOpen ? `${liveRide.waitTime} mins` : "Closed";
                 }
 
-                // Create a marker and bind a interactive popup
                 const marker = L.marker([ride.lat, ride.lon]).addTo(map);
                 marker.bindPopup(`
                     <div class="wait-label">
@@ -95,13 +119,18 @@
                     </div>
                 `);
             });
+
+            logStatus("Map fully loaded! Click pins to test.");
         }
 
-        // Run the function when the page loads
-        loadWaitTimes();
+        // Run map rendering workflow
+        try {
+            loadWaitTimes();
+        } catch(e) {
+            logStatus("Fatal crash: " + e.message);
+        }
         
-        // Force Leaflet to recalculate sizes in case container dimensions changed on load
-        setTimeout(() => { map.invalidateSize(); }, 200);
+        setTimeout(() => { map.invalidateSize(); }, 300);
     </script>
 </body>
 </html>
