@@ -1,38 +1,215 @@
-// 1. Define your park coordinates, zoom levels, and camera angles
-const parks = {
-  magic_kingdom: {
-    center: [-81.5638, 28.4175],
-    zoom: 16,
-    pitch: 55,
-    bearing: -20
-  },
-  islands_of_adventure: {
-    center: [-81.4714, 28.4718],
-    zoom: 16,
-    pitch: 60,
-    bearing: 45
-  },
-  epic_universe: {
-    center: [-81.4429, 28.4419],
-    zoom: 15.5,
-    pitch: 50,
-    bearing: 10
-  }
-};
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Orlando Theme Parks Live Map</title>
+    
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl-js.css" rel="stylesheet">
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-// 2. Trigger the flight on user interaction (like a dropdown change)
-function flyToPark(parkKey) {
-  const target = parks[parkKey];
-  
-  if (target) {
-    map.flyTo({
-      center: target.center,
-      zoom: target.zoom,
-      pitch: target.pitch,
-      bearing: target.bearing,
-      speed: 0.8, // Controls how fast the flight is (default is 1.2)
-      curve: 1.4, // Controls the camera's upward arc height
-      essential: true // Ensures the animation runs even if user has prefers-reduced-motion turned on
-    });
-  }
-}
+        body, html {
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            background-color: #1a1a1a;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Fixed Navigation Overlay Container */
+        .map-overlay {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        /* Styled Custom Select Dropdown */
+        .park-selector {
+            width: 100%;
+            padding: 14px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            background-color: rgba(30, 30, 30, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            appearance: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .park-selector:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.3);
+        }
+
+        /* Custom dropdown arrow indicator */
+        .map-overlay::after {
+            content: "▼";
+            font-size: 12px;
+            color: #ffffff;
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        /* Adjust UI positioning safe zones for mobile */
+        @supports (-webkit-touch-callout: none) {
+            .map-overlay {
+                top: env(safe-area-inset-top, 16px);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="map-overlay">
+        <select id="park-select" class="park-selector" onchange="navigateToPark(this.value)">
+            <option value="orlando_overview">📍 Orlando Overview</option>
+            <optgroup label="Walt Disney World">
+                <option value="magic_kingdom">Magic Kingdom</option>
+                <option value="epcot">Epcot</option>
+                <option value="hollywood_studios">Hollywood Studios</option>
+                <option value="animal_kingdom">Animal Kingdom</option>
+            </optgroup>
+            <optgroup label="Universal Orlando">
+                <option value="universal_studios">Universal Studios Florida</option>
+                <option value="islands_of_adventure">Islands of Adventure</option>
+                <option value="epic_universe">Epic Universe</option>
+            </optgroup>
+            <optgroup label="SeaWorld Parks">
+                <option value="seaworld">SeaWorld Orlando</option>
+            </optgroup>
+        </select>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl-js.js"></script>
+    
+    <script>
+        // REPLACE WITH YOUR ACTUAL MAPBOX ACCESS TOKEN
+        mapboxgl.accessToken = 'pk.eyJ1IjoiYmVub2Jpd2FuIiwiYSI6ImNqZXlvaGxjbDA1d2Myd3MwcTRkYWQ0b3MifQ.uRr3IHyBhpntzFb5WRuX4Q';
+
+        // Precise park coordinates, zoom depth, pitch (tilt), and bearings (rotation)
+        const parkLocations = {
+            orlando_overview: {
+                center: [-81.5000, 28.4450],
+                zoom: 10.5,
+                pitch: 30,
+                bearing: 0
+            },
+            magic_kingdom: {
+                center: [-81.5638, 28.4175],
+                zoom: 16,
+                pitch: 55,
+                bearing: -25
+            },
+            epcot: {
+                center: [-81.5514, 28.3710],
+                zoom: 15.5,
+                pitch: 45,
+                bearing: 0
+            },
+            hollywood_studios: {
+                center: [-81.5608, 28.3575],
+                zoom: 16,
+                pitch: 50,
+                bearing: 40
+            },
+            animal_kingdom: {
+                center: [-81.5907, 28.3529],
+                zoom: 15.5,
+                pitch: 45,
+                bearing: -15
+            },
+            universal_studios: {
+                center: [-81.4686, 28.4795],
+                zoom: 16,
+                pitch: 50,
+                bearing: 90
+            },
+            islands_of_adventure: {
+                center: [-81.4714, 28.4718],
+                zoom: 16,
+                pitch: 55,
+                bearing: 45
+            },
+            epic_universe: {
+                center: [-81.4429, 28.4419],
+                zoom: 15.5,
+                pitch: 52,
+                bearing: 15
+            },
+            seaworld: {
+                center: [-81.4614, 28.4162],
+                zoom: 15.5,
+                pitch: 45,
+                bearing: -30
+            }
+        };
+
+        // Initialize the Map box instance
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/satellite-streets-v12', // Satellite view looks cinematic during fly-tos
+            center: parkLocations.orlando_overview.center,
+            zoom: parkLocations.orlando_overview.zoom,
+            pitch: parkLocations.orlando_overview.pitch,
+            bearing: parkLocations.orlando_overview.bearing,
+            antialias: true
+        });
+
+        // Add optional zoom and rotation navigation controls to the UI
+        map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+
+        // Function that handles the camera movement animation
+        function navigateToPark(parkKey) {
+            const destination = parkLocations[parkKey];
+            
+            if (destination) {
+                map.flyTo({
+                    center: destination.center,
+                    zoom: destination.zoom,
+                    pitch: destination.pitch,
+                    bearing: destination.bearing,
+                    speed: 0.75,       // Cinematic camera speed transition (Default: 1.2)
+                    curve: 1.35,       // Curvature flight arc factor
+                    essential: true    // Forces animation respect even over power saving settings
+                });
+            }
+        }
+
+        // Optional: Ensure dropdown syncs if user manually drags or pans the map back out
+        map.on('moveend', () => {
+            // Can be expanded to cross-reference coordinates and highlight active zones
+        });
+    </script>
+</body>
+</html>
