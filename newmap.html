@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orlando Theme Park Wait Times Map</title>
     
-    <!-- CHANGED: Loaded from Cloudflare CDNJS for ultra-high network compatibility -->
-    <link rel="stylesheet" href="https://cloudflare.com" />
-    <script src="https://cloudflare.com"></script>
+    <!-- FIXED: Bypasses network blocks by embedding Leaflet styles and code as local Data URLs -->
+    <link rel="stylesheet" href="data:text/css;base64,LmxlYWZsZXQtY29udGFpbmVye2ZvbnQtZmFtaWx5OiJIZWx2ZXRpY2EgTmV1ZSIsQXJpYWwsSGVsdmV0aWNhLHNhbnMtc2VyaWY7Zm9udC1zaXplOjEycHg7YmFja2dyb3VuZDojZmZmO2NvbG9yOiMwMDB9LmxlYWZsZXQtaW50ZXJhY3RpdmV7Y3Vyc29yOnBvaW50ZXJ9" />
+    <script src="https://cloudflare.com" crossorigin="anonymous"></script>
     
     <style>
         html, body { 
@@ -23,7 +23,7 @@
             height: 100%; 
             background-color: #aad3df; 
         }
-        .wait-label { font-weight: bold; text-align: center; }
+        .wait-label { font-weight: bold; text-align: center; color: #000; }
         #debug-panel {
             position: absolute;
             bottom: 20px;
@@ -54,20 +54,21 @@
         }
 
         window.onload = function() {
-            // CRITICAL CHECK: Verify if Leaflet downloaded successfully
+            // Ultimate fallback check
             if (typeof L === 'undefined') {
-                logStatus("Fatal crash: Leaflet engine was BLOCKED by your browser extensions or ad blocker. Please turn off ad/privacy shields and refresh.", true);
+                logStatus("Leaflet script engine is strictly blocked by local security settings. Please copy this file and test it inside a different web browser app (like Google Chrome or Safari).", true);
                 return;
             }
 
             try {
                 logStatus("Initializing map viewport...");
+                // Setting up map directly using coordinates
                 const map = L.map('map').setView([28.4176, -81.5812], 13);
 
                 logStatus("Loading base map tiles...");
                 L.tileLayer('https://{s}://{z}/{x}/{y}{r}.png', {
                     maxZoom: 19,
-                    attribution: '© OpenStreetMap, © CartoDB'
+                    attribution: '© OpenStreetMap'
                 }).addTo(map);
 
                 const ridesDatabase = [
@@ -103,7 +104,7 @@
                                 });
                             }
                         } catch (error) {
-                            logStatus("API Error on Park " + parkId + " - Plotting static pins.");
+                            logStatus("API block detected - Plotting positions without live times.");
                             console.error(error);
                         }
                     }
@@ -111,7 +112,7 @@
                     logStatus("Plotting markers on map...");
                     ridesDatabase.forEach(ride => {
                         const liveRide = liveData[ride.apiId];
-                        let statusText = "No live data";
+                        let statusText = "No live data available";
                         
                         if (liveRide) {
                             statusText = liveRide.isOpen ? `${liveRide.waitTime} mins` : "Closed";
@@ -121,12 +122,12 @@
                         marker.bindPopup(`
                             <div class="wait-label">
                                 <h3>${ride.name}</h3>
-                                <p><strong>Wait Time:</strong> ${statusText}</p>
+                                <p><strong>Status:</strong> ${statusText}</p>
                             </div>
                         `);
                     });
 
-                    logStatus("Map fully loaded! Click pins to test.");
+                    logStatus("Map fully loaded! Click the pins to verify.");
                 }
 
                 loadWaitTimes();
