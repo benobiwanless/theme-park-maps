@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Orlando Live Ride Map Tracker</title>
+    <title>Orlando Live Ride Map & Tracker</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -12,6 +12,7 @@
             --status-green: #2ec4b6;
             --status-yellow: #ff9f1c;
             --status-red: #e71d36;
+            --bg-color: #f8f9fa;
         }
 
         body, html {
@@ -20,15 +21,20 @@
             width: 100%;
             height: 100%;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
             overflow: hidden;
         }
 
-        /* Top Header Navigation */
+        /* Main App Layout Grid */
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Top Navigation Header */
         header {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
             height: 60px;
             background: #111;
             color: white;
@@ -38,6 +44,7 @@
             align-items: center;
             z-index: 2000;
             box-sizing: border-box;
+            flex-shrink: 0;
         }
 
         header h1 { 
@@ -70,89 +77,289 @@
             background: #fff;
             border: none;
             cursor: pointer;
+            font-weight: 500;
         }
 
-        /* Fixed absolute positioning prevents rendering collapse */
+        /* Split Screen Workspace */
+        #main-workspace {
+            display: flex;
+            flex-grow: 1;
+            height: calc(100vh - 60px);
+            width: 100%;
+            overflow: hidden;
+        }
+
+        /* Left Side: The Interactive Real Map */
         #map {
-            position: absolute;
-            top: 60px;
-            bottom: 0;
-            left: 0;
-            right: 0;
+            flex: 1;
+            height: 100%;
+            background: #e5e9f0;
             z-index: 1;
-            background: #f0f2f5;
         }
 
-        /* Custom Map Pin Styles */
+        /* Right Side: Linked Ride Status Cards Panel */
+        #rides-side-panel {
+            width: 360px;
+            height: 100%;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+            box-sizing: border-box;
+        }
+
+        .panel-header {
+            padding: 15px;
+            background: #f1f3f5;
+            border-bottom: 1px solid #e9ecef;
+            font-weight: bold;
+            font-size: 15px;
+            color: #495057;
+        }
+
+        #ride-cards-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Ride Card Styles */
+        .ride-sidebar-card {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .ride-sidebar-card:hover {
+            border-color: #007aff;
+            background-color: #f0f7ff;
+            transform: translateY(-1px);
+        }
+
+        .ride-sidebar-card.active-highlight {
+            border-color: #007aff;
+            background-color: #e6f2ff;
+            box-shadow: 0 0 0 2px rgba(0,122,255,0.2);
+        }
+
+        .card-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #212529;
+            padding-right: 8px;
+        }
+
+        .card-badge {
+            font-size: 12px;
+            font-weight: bold;
+            padding: 4px 10px;
+            border-radius: 12px;
+            color: white;
+            white-space: nowrap;
+        }
+
+        /* Circular Numeric Map Pins */
         .custom-pin {
             display: flex;
             justify-content: center;
             align-items: center;
-            width: 32px !important;
-            height: 32px !important;
+            width: 30px !important;
+            height: 30px !important;
             border-radius: 50%;
             color: white;
             font-weight: bold;
             font-size: 11px;
             border: 2px solid white;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-            text-shadow: 1px 1px 0px rgba(0,0,0,0.5);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            text-shadow: 1px 1px 0px rgba(0,0,0,0.4);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .custom-pin:hover {
+            transform: scale(1.15);
+            z-index: 9999 !important;
         }
 
+        /* Universal Color Codes */
         .bg-green { background-color: var(--status-green); }
         .bg-yellow { background-color: var(--status-yellow); }
         .bg-red { background-color: var(--status-red); }
-        .bg-closed { background-color: #555555; }
+        .bg-closed { background-color: #6c757d; }
 
         .popup-title {
             font-weight: bold;
             font-size: 14px;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
-        .popup-status {
-            font-size: 12px;
-            color: #666;
+        
+        /* Mobile Adaptability */
+        @media (max-width: 768px) {
+            #main-workspace { flex-direction: column; }
+            #rides-side-panel { width: 100%; height: 220px; }
         }
     </style>
 </head>
 <body>
 
-<header>
-    <h1>Orlando Live Ride Map</h1>
-    <div class="header-right">
-        <a href="index.html" class="nav-link">← Back to List View</a>
-        <select id="parkSelect">
-            <option value="75ea578a-adc8-4116-a54d-dccb60765ef9" data-lat="28.4178" data-lng="-81.5812">Magic Kingdom</option>
-            <option value="47f90d2c-e191-4239-a466-5892ef59a88b" data-lat="28.3710" data-lng="-81.5494">EPCOT</option>
-            <option value="288747d1-8b4f-4a64-867e-ea7c9b27bad8" data-lat="28.3575" data-lng="-81.5583">Hollywood Studios</option>
-            <option value="1c84a229-8862-4648-9c71-378ddd2c7693" data-lat="28.3529" data-lng="-81.5907">Animal Kingdom</option>
-            <option value="eb3f4560-2383-4a36-9152-6b3e5ed6bc57" data-lat="28.4748" data-lng="-81.4671">Universal Studios Florida</option>
-            <option value="267615cc-8943-4c2a-ae2c-5da728ca591f" data-lat="28.4712" data-lng="-81.4715">Islands of Adventure</option>
-            <option value="12dbb85b-265f-44e6-bccf-f1faa17211fc" data-lat="28.4422" data-lng="-81.4490">Epic Universe</option>
-        </select>
-    </div>
-</header>
+<div id="app-container">
+    <header>
+        <h1>Orlando Live Ride Map</h1>
+        <div class="header-right">
+            <a href="index.html" class="nav-link">← Standalone List</a>
+            <select id="parkSelect">
+                <option value="75ea578a-adc8-4116-a54d-dccb60765ef9" data-lat="28.4178" data-lng="-81.5812">Magic Kingdom</option>
+                <option value="47f90d2c-e191-4239-a466-5892ef59a88b" data-lat="28.3710" data-lng="-81.5494">EPCOT</option>
+                <option value="288747d1-8b4f-4a64-867e-ea7c9b27bad8" data-lat="28.3575" data-lng="-81.5583">Hollywood Studios</option>
+                <option value="1c84a229-8862-4648-9c71-378ddd2c7693" data-lat="28.3529" data-lng="-81.5907">Animal Kingdom</option>
+                <option value="eb3f4560-2383-4a36-9152-6b3e5ed6bc57" data-lat="28.4748" data-lng="-81.4671">Universal Studios Florida</option>
+                <option value="267615cc-8943-4c2a-ae2c-5da728ca591f" data-lat="28.4712" data-lng="-81.4715">Islands of Adventure</option>
+                <option value="12dbb85b-265f-44e6-bccf-f1faa17211fc" data-lat="28.4422" data-lng="-81.4490">Epic Universe</option>
+            </select>
+        </div>
+    </header>
 
-<div id="map"></div>
+    <div id="main-workspace">
+        <div id="map"></div>
+
+        <div id="rides-side-panel">
+            <div class="panel-header">Attractions & Wait Times</div>
+            <div id="ride-cards-container">
+                </div>
+        </div>
+    </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        
-        // 1. Initialize Map
+        // Initialize Map Object
         const map = L.map('map').setView([28.4178, -81.5812], 14);
 
-        // 2. Load OpenStreetMap Graphics Tiles
+        // Standard OSM Vector Tile Layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        // 3. Layer Group for Pins
         let markerLayerGroup = L.layerGroup().addTo(map);
-        
-        // Globally declared to handle event listener context properly
         const parkSelectDropdown = document.getElementById('parkSelect');
+        const cardsContainer = document.getElementById('ride-cards-container');
 
-        async
+        // Track marker references to allow cross-clicking highlight links
+        let mapMarkersTracker = {};
+
+        async function updateMapAndSidebar() {
+            const parkId = parkSelectDropdown.value;
+            const selectedOption = parkSelectDropdown.options[parkSelectDropdown.selectedIndex];
+            const parkLat = parseFloat(selectedOption.getAttribute('data-lat'));
+            const parkLng = parseFloat(selectedOption.getAttribute('data-lng'));
+            
+            // Focus map camera
+            map.flyTo([parkLat, parkLng], 15);
+            
+            // Clear existing states
+            markerLayerGroup.clearLayers();
+            cardsContainer.innerHTML = '';
+            mapMarkersTracker = {};
+
+            try {
+                // Fetch live feeds from themeparks.wiki
+                const liveResponse = await fetch(`https://api.themeparks.wiki/v1/entity/${parkId}/live`);
+                const liveData = await liveResponse.json();
+
+                if (!liveData || !liveData.liveData) {
+                    cardsContainer.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">No live attraction data available.</div>';
+                    return;
+                }
+
+                // Filter explicitly to Attractions / Rides
+                const rides = liveData.liveData.filter(item => item.entityType === "ATTRACTION");
+                
+                if (rides.length === 0) {
+                    cardsContainer.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">No rides found active.</div>';
+                    return;
+                }
+
+                // Sort alphabetically
+                rides.sort((a, b) => a.name.localeCompare(b.name));
+
+                // Optional: Attempt to pull details coordinates framework
+                let coordinatesLookup = {};
+                try {
+                    const detailsResponse = await fetch(`https://api.themeparks.wiki/v1/entity/${parkId}`);
+                    const detailsData = await detailsResponse.json();
+                    if (detailsData && detailsData.children) {
+                        detailsData.children.forEach(c => {
+                            if (c.location) coordinatesLookup[c.id] = c.location;
+                        });
+                    }
+                } catch(e) { console.log("Static info step skipped, using center-grid distribution mode."); }
+
+                // Map out pins and build matching cards
+                rides.forEach((ride, index) => {
+                    let waitText = "-";
+                    let colorClass = "bg-closed";
+                    let statusLabel = "Closed";
+                    
+                    const isOperating = ride.status === "OPERATING";
+                    const standbyWait = ride.queue?.STANDBY?.waitTime;
+
+                    if (isOperating && standbyWait !== undefined && standbyWait !== null) {
+                        waitText = standbyWait;
+                        statusLabel = `${standbyWait} min`;
+                        if (standbyWait <= 15) colorClass = "bg-green";
+                        else if (standbyWait <= 30) colorClass = "bg-yellow";
+                        else colorClass = "bg-red";
+                    } else if (ride.status === "DOWN") {
+                        waitText = "✖";
+                        colorClass = "bg-red";
+                        statusLabel = "DOWN";
+                    }
+
+                    // Coordinate Check & Distribution Fallback Algorithm
+                    let rideLat = parkLat;
+                    let rideLng = parkLng;
+
+                    if (coordinatesLookup[ride.id]) {
+                        rideLat = coordinatesLookup[ride.id].latitude;
+                        rideLng = coordinatesLookup[ride.id].longitude;
+                    } else {
+                        // Spread out blank coordinates mathematically around center so they don't stack directly on top of each other
+                        const angle = (index / rides.length) * 2 * Math.PI;
+                        const radius = 0.0025; // Relative radius spread
+                        rideLat += Math.sin(angle) * radius;
+                        rideLng += Math.cos(angle) * radius;
+                    }
+
+                    // 1. Create Map Marker Pin
+                    const customIcon = L.divIcon({
+                        className: `custom-pin ${colorClass}`,
+                        html: `<span>${waitText}</span>`,
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    });
+
+                    const marker = L.marker([rideLat, rideLng], { icon: customIcon });
+                    marker.bindPopup(`
+                        <div class="popup-title">${ride.name}</div>
+                        <div style="font-size:12px; color:#555;">Wait: <b>${statusLabel}</b></div>
+                    `);
+                    
+                    markerLayerGroup.addLayer(marker);
+                    
+                    // Track reference link
+                    mapMarkersTracker[ride.id] = marker;
+
+                    // 2
