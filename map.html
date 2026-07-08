@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orlando Live Ride Map & Tracker</title>
     
+    <!-- Leaflet Map CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
@@ -156,4 +157,328 @@
             font-size: 12px;
             font-weight: bold;
             padding: 4px 10px;
-            border-radius: 12
+            border-radius: 12px;
+            color: white;
+            white-space: nowrap;
+        }
+
+        .custom-pin {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 30px !important;
+            height: 30px !important;
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            font-size: 11px;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            text-shadow: 1px 1px 0px rgba(0,0,0,0.4);
+            cursor: pointer;
+        }
+
+        .bg-green { background-color: var(--status-green); }
+        .bg-yellow { background-color: var(--status-yellow); }
+        .bg-red { background-color: var(--status-red); }
+        .bg-closed { background-color: #6c757d; }
+
+        .popup-title {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+        
+        @media (max-width: 768px) {
+            #main-workspace { flex-direction: column; }
+            #rides-side-panel { width: 100%; height: 220px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+    <header>
+        <h1>Orlando Live Ride Map</h1>
+        <div class="header-right">
+            <a href="index.html" class="nav-link">← Standalone List</a>
+            <select id="parkSelect">
+                <option value="75ea578a-adc8-4116-a54d-dccb60765ef9" data-lat="28.4161" data-lng="-81.5812">Magic Kingdom</option>
+                <option value="47f90d2c-e191-4239-a466-5892ef59a88b" data-lat="28.3765" data-lng="-81.5521">EPCOT</option>
+                <option value="288747d1-8b4f-4a64-867e-ea7c9b27bad8" data-lat="28.3575" data-lng="-81.5583">Hollywood Studios</option>
+                <option value="1c84a229-8862-4648-9c71-378ddd2c7693" data-lat="28.3551" data-lng="-81.5901">Animal Kingdom</option>
+                <option value="eb3f4560-2383-4a36-9152-6b3e5ed6bc57" data-lat="28.4795" data-lng="-81.4678">Universal Studios Florida</option>
+                <option value="267615cc-8943-4c2a-ae2c-5da728ca591f" data-lat="28.4714" data-lng="-81.4703">Islands of Adventure</option>
+                <option value="12dbb85b-265f-44e6-bccf-f1faa17211fc" data-lat="28.4422" data-lng="-81.4490">Epic Universe</option>
+                <option value="27d64dee-d85e-48dc-ad6d-8077445cd946" data-lat="28.4101" data-lng="-81.4608">SeaWorld Orlando</option>
+                <option value="9e2867f8-68eb-454f-b367-0ed0fd72d72a" data-lat="28.4065" data-lng="-81.4632">Aquatica Orlando</option>
+            </select>
+        </div>
+    </header>
+
+    <div id="main-workspace">
+        <div id="map"></div>
+        <div id="rides-side-panel">
+            <div class="panel-header">Attractions & Wait Times</div>
+            <div id="ride-cards-container"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Leaflet Map JS Engine -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    // Landmark Coordinates Registry
+    const hardcodedLocations = {
+        "space mountain": { lat: 28.4192, lng: -81.5771 },
+        "seven dwarfs mine train": { lat: 28.4202, lng: -81.5803 },
+        "big thunder mountain railroad": { lat: 28.4211, lng: -81.5847 },
+        "pirates of the caribbean": { lat: 28.4184, lng: -81.5843 },
+        "haunted mansion": { lat: 28.4201, lng: -81.5828 },
+        "jungle cruise": { lat: 28.4182, lng: -81.5849 },
+        "peter pan's flight": { lat: 28.4206, lng: -81.5824 },
+        "it's a small world": { lat: 28.4207, lng: -81.5829 },
+        "buzz lightyear's space ranger spin": { lat: 28.4190, lng: -81.5783 },
+        "tomorrowland transit authority peoplemover": { lat: 28.4191, lng: -81.5779 },
+        "under the sea ~ journey of the little mermaid": { lat: 28.4215, lng: -81.5806 },
+        "the many adventures of winnie the pooh": { lat: 28.4204, lng: -81.5799 },
+        "dumbo the flying elephant": { lat: 28.4212, lng: -81.5786 },
+        "the barnstormer": { lat: 28.4209, lng: -81.5782 },
+        "astro orbiter": { lat: 28.4191, lng: -81.5779 },
+        "mad tea party": { lat: 28.4202, lng: -81.5793 },
+        "prince charming regal carrousel": { lat: 28.4202, lng: -81.5813 },
+        "the magic carpets of aladdin": { lat: 28.4186, lng: -81.5841 },
+        "spaceship earth": { lat: 28.3762, lng: -81.5524 },
+        "guardians of the galaxy: cosmic rewind": { lat: 28.3748, lng: -81.5501 },
+        "test track": { lat: 28.3742, lng: -81.5492 },
+        "soarin' around the world": { lat: 28.3743, lng: -81.5546 },
+        "remy's ratatouille adventure": { lat: 28.3681, lng: -81.5523 },
+        "frozen ever after": { lat: 28.3699, lng: -81.5492 },
+        "gran fiesta tour starring the three caballeros": { lat: 28.3706, lng: -81.5501 },
+        "mission: space": { lat: 28.3740, lng: -81.5482 },
+        "the seas with nemo & friends": { lat: 28.3752, lng: -81.5543 },
+        "living with the land": { lat: 28.3743, lng: -81.5546 },
+        "journey into imagination with figment": { lat: 28.3734, lng: -81.5534 },
+        "star wars: rise of the resistance": { lat: 28.3558, lng: -81.5621 },
+        "millennium falcon: smugglers run": { lat: 28.3567, lng: -81.5632 },
+        "slinky dog dash": { lat: 28.3564, lng: -81.5598 },
+        "the twilight zone tower of terror": { lat: 28.3591, lng: -81.5586 },
+        "toy story mania!": { lat: 28.3569, lng: -81.5606 },
+        "rock 'n' roller coaster starring aerosmith": { lat: 28.3582, lng: -81.5574 },
+        "mickey & minnie's runaway railway": { lat: 28.3598, lng: -81.5593 },
+        "alien swirling saucers": { lat: 28.3572, lng: -81.5601 },
+        "star tours – the adventures continue": { lat: 28.3575, lng: -81.5620 },
+        "avatar flight of passage": { lat: 28.3554, lng: -81.5927 },
+        "expedition everest": { lat: 28.3585, lng: -81.5866 },
+        "kilimanjaro safaris": { lat: 28.3611, lng: -81.5915 },
+        "dinosaur": { lat: 28.3562, lng: -81.5878 },
+        "na'vi river journey": { lat: 28.3556, lng: -81.5919 },
+        "kali river rapids": { lat: 28.3597, lng: -81.5861 },
+        "triceratop spin": { lat: 28.3568, lng: -81.5879 },
+        "harry potter and the escape from gringotts": { lat: 28.4791, lng: -81.4697 },
+        "revenge of the mummy": { lat: 28.4796, lng: -81.4686 },
+        "hollywood rip ride rockit": { lat: 28.4789, lng: -81.4668 },
+        "transformers: the ride-3d": { lat: 28.4798, lng: -81.4677 },
+        "e.t. adventure": { lat: 28.4764, lng: -81.4704 },
+        "men in black: alien attack": { lat: 28.4776, lng: -81.4687 },
+        "the simpsons ride": { lat: 28.4773, lng: -81.4699 },
+        "despicable me minion mayhem": { lat: 28.4797, lng: -81.4667 },
+        "illumination's villain-con minion blast": { lat: 28.4799, lng: -81.4674 },
+        "fast & furious - supercharged": { lat: 28.4805, lng: -81.4685 },
+        "race through new york starring jimmy fallon": { lat: 28.4799, lng: -81.4684 },
+        "velocicoaster": { lat: 28.4721, lng: -81.4729 },
+        "hagrid's magical creatures motorbike adventure": { lat: 28.4728, lng: -81.4711 },
+        "harry potter and the forbidden journey": { lat: 28.4731, lng: -81.4740 },
+        "the incredible hulk coaster": { lat: 28.4705, lng: -81.4716 },
+        "jurassic park river adventure": { lat: 28.4727, lng: -81.4735 },
+        "dudley do-right's ripsaw falls": { lat: 28.4711, lng: -81.4746 },
+        "popeye & bluto's bilge-rat barges": { lat: 28.4701, lng: -81.4744 },
+        "doctor doom's fearfall": { lat: 28.4703, lng: -81.4709 },
+        "the cat in the hat": { lat: 28.4712, lng: -81.4689 },
+        "high in the sky seuss trolley train ride": { lat: 28.4716, lng: -81.4691 },
+        "one fish, two fish, red fish, blue fish": { lat: 28.4710, lng: -81.4692 },
+        "caro-seuss-el": { lat: 28.4713, lng: -81.4696 },
+        "flight of the hippogriff": { lat: 28.4735, lng: -81.4736 },
+        "storm force accelatron": { lat: 28.4703, lng: -81.4719 }
+    };
+
+    function findCustomCoordinates(name) {
+        if (!name || typeof name !== 'string') return null;
+        const cleanName = name.toLowerCase().trim()
+            .replace(/[\u2018\u2019]/g, "'")
+            .replace(/[\u201c\u201d]/g, '"');
+        
+        if (hardcodedLocations[cleanName]) return hardcodedLocations[cleanName];
+
+        for (const key in hardcodedLocations) {
+            if (cleanName.includes(key) || key.includes(cleanName)) {
+                return hardcodedLocations[key];
+            }
+        }
+        return null;
+    }
+
+    // Wrap initialization cleanly back into standard DOM lifecycle hooks
+    document.addEventListener("DOMContentLoaded", function() {
+        const map = L.map('map', {
+            zoomControl: true,
+            fadeAnimation: true
+        }).setView([28.4161, -81.5812], 14);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            maxZoom: 20,
+            attribution: '© OpenStreetMap, © CARTO'
+        }).addTo(map);
+
+        let markerLayerGroup = L.layerGroup().addTo(map);
+        const parkSelectDropdown = document.getElementById('parkSelect');
+        const cardsContainer = document.getElementById('ride-cards-container');
+
+        async function updateMapAndSidebar() {
+            if (!parkSelectDropdown || !cardsContainer) return;
+
+            const parkId = parkSelectDropdown.value;
+            const selectedOption = parkSelectDropdown.options[parkSelectDropdown.selectedIndex];
+            const parkLat = parseFloat(selectedOption.getAttribute('data-lat')) || 28.4161;
+            const parkLng = parseFloat(selectedOption.getAttribute('data-lng')) || -81.5812;
+            
+            map.invalidateSize();
+            map.flyTo([parkLat, parkLng], 15, { animate: true, duration: 1.2 });
+            
+            markerLayerGroup.clearLayers();
+            cardsContainer.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">Mapping landmark coordinates...</div>';
+
+            try {
+                const [liveResponse, staticResponse] = await Promise.all([
+                    fetch(`https://api.themeparks.wiki/v1/entity/${parkId}/live`).catch(() => null),
+                    fetch(`https://api.themeparks.wiki/v1/entity/${parkId}`).catch(() => null)
+                ]);
+
+                if (!liveResponse) {
+                    cardsContainer.innerHTML = '<div style="padding:20px; text-align:center; color:red;">Data sync dropped.</div>';
+                    return;
+                }
+
+                const liveData = await liveResponse.json().catch(() => null);
+                const staticData = staticResponse ? await staticResponse.json().catch(() => null) : null;
+
+                if (!liveData || !liveData.liveData) {
+                    cardsContainer.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">No live data available.</div>';
+                    return;
+                }
+
+                const apiCoordinateRegistry = {};
+                if (staticData && staticData.children) {
+                    staticData.children.forEach(child => {
+                        if (child && child.id && child.location && child.location.latitude && child.location.longitude) {
+                            apiCoordinateRegistry[child.id] = {
+                                lat: child.location.latitude,
+                                lng: child.location.longitude
+                            };
+                        }
+                    });
+                }
+
+                const rides = liveData.liveData.filter(item => item && item.entityType === "ATTRACTION" && item.name);
+                if (rides.length === 0) {
+                    cardsContainer.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">No active attractions.</div>';
+                    return;
+                }
+
+                rides.sort((a, b) => a.name.localeCompare(b.name));
+                cardsContainer.innerHTML = '';
+
+                rides.forEach((ride, index) => {
+                    let waitText = "-";
+                    let colorClass = "bg-closed";
+                    let statusLabel = "Closed";
+                    
+                    const isOperating = ride.status === "OPERATING";
+                    const standbyWait = ride.queue?.STANDBY?.waitTime;
+
+                    if (isOperating && standbyWait !== undefined && standbyWait !== null) {
+                        waitText = standbyWait;
+                        statusLabel = `${standbyWait} min`;
+                        if (standbyWait <= 15) colorClass = "bg-green";
+                        else if (standbyWait <= 30) colorClass = "bg-yellow";
+                        else colorClass = "bg-red";
+                    } else if (ride.status === "DOWN") {
+                        waitText = "✖";
+                        colorClass = "bg-red";
+                        statusLabel = "DOWN";
+                    }
+
+                    let rideLat, rideLng;
+                    const customCoords = findCustomCoordinates(ride.name);
+
+                    if (customCoords) {
+                        rideLat = customCoords.lat;
+                        rideLng = customCoords.lng;
+                    } else if (apiCoordinateRegistry[ride.id]) {
+                        rideLat = apiCoordinateRegistry[ride.id].lat;
+                        rideLng = apiCoordinateRegistry[apiCoordinateRegistry[ride.id]];
+                    } else {
+                        const angle = (index / rides.length) * 2 * Math.PI;
+                        const radius = 0.0030; 
+                        rideLat = parkLat + (Math.sin(angle) * radius);
+                        rideLng = parkLng + (Math.cos(angle) * radius);
+                    }
+
+                    const customIcon = L.divIcon({
+                        className: `custom-pin ${colorClass}`,
+                        html: `<span>${waitText}</span>`,
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    });
+
+                    const marker = L.marker([rideLat, rideLng], { icon: customIcon });
+                    marker.bindPopup(`
+                        <div class="popup-title">${ride.name}</div>
+                        <div style="font-size:12px; color:#555;">Wait Time: <b>${statusLabel}</b></div>
+                    `);
+                    
+                    markerLayerGroup.addLayer(marker);
+
+                    const card = document.createElement('div');
+                    card.className = 'ride-sidebar-card';
+                    card.id = `card-${ride.id}`;
+                    card.innerHTML = `
+                        <span class="card-name">${ride.name}</span>
+                        <span class="card-badge ${colorClass}">${statusLabel}</span>
+                    `;
+
+                    card.addEventListener('click', () => {
+                        document.querySelectorAll('.ride-sidebar-card').forEach(c => c.classList.remove('active-highlight'));
+                        card.classList.add('active-highlight');
+                        map.setView([rideLat, rideLng], 17);
+                        marker.openPopup();
+                    });
+
+                    marker.on('click', () => {
+                        document.querySelectorAll('.ride-sidebar-card').forEach(c => c.classList.remove('active-highlight'));
+                        const matchingCard = document.getElementById(`card-${ride.id}`);
+                        if (matchingCard) {
+                            matchingCard.classList.add('active-highlight');
+                            matchingCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }
+                    });
+
+                    cardsContainer.appendChild(card);
+                });
+
+                map.invalidateSize();
+
+            } catch (err) {
+                console.error("Data thread error caught safely:", err);
+                cardsContainer.innerHTML = '<div style="padding:20px; color:var(--status-red);">Error displaying stream elements.</div>';
+            }
+        }
+
+        parkSelectDropdown.addEventListener('change', updateMapAndSidebar);
+        setTimeout(updateMapAndSidebar, 200);
+    });
+</script>
+
+</body>
+</html>
