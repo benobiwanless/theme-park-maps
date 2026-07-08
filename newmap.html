@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orlando Theme Park Wait Times Map</title>
-    <!-- Include Leaflet.js CSS and JS from CDN -->
-    <link rel="stylesheet" href="https://unpkg.com" crossorigin="" />
-    <script src="https://unpkg.com" crossorigin=""></script>
+    
+    <!-- CHANGED: Loaded from Cloudflare CDNJS for ultra-high network compatibility -->
+    <link rel="stylesheet" href="https://cloudflare.com" />
+    <script src="https://cloudflare.com"></script>
+    
     <style>
         html, body { 
             margin: 0; 
@@ -22,7 +24,6 @@
             background-color: #aad3df; 
         }
         .wait-label { font-weight: bold; text-align: center; }
-        /* Real-time screen debugger panel */
         #debug-panel {
             position: absolute;
             bottom: 20px;
@@ -46,10 +47,19 @@
 
     <script>
         const debugEl = document.getElementById('debug-panel');
-        function logStatus(msg) { debugEl.innerHTML = "Status: " + msg; console.log(msg); }
+        function logStatus(msg, isError = false) { 
+            debugEl.innerHTML = "Status: " + msg; 
+            if(isError) debugEl.style.color = "#ff3333";
+            console.log(msg); 
+        }
 
-        // FIXED: Wrap everything inside window.onload so it waits for the HTML to exist
         window.onload = function() {
+            // CRITICAL CHECK: Verify if Leaflet downloaded successfully
+            if (typeof L === 'undefined') {
+                logStatus("Fatal crash: Leaflet engine was BLOCKED by your browser extensions or ad blocker. Please turn off ad/privacy shields and refresh.", true);
+                return;
+            }
+
             try {
                 logStatus("Initializing map viewport...");
                 const map = L.map('map').setView([28.4176, -81.5812], 13);
@@ -123,7 +133,7 @@
                 setTimeout(() => { map.invalidateSize(); }, 300);
 
             } catch(e) {
-                logStatus("Fatal crash: " + e.message);
+                logStatus("Fatal crash: " + e.message, true);
             }
         };
     </script>
