@@ -2,222 +2,157 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Orlando Theme Park Live Tracker</title>
+    <title>Orlando Theme Park Map</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
+    
     <style>
-        :root {
-            --bg-color: #f4f6f9;
-            --card-bg: #ffffff;
-            --text-main: #333333;
-            --status-green: #2ec4b6;
-            --status-yellow: #ff9f1c;
-            --status-red: #e71d36;
+        body { margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        /* Dropdown Selector Menu Styling */
+        #park-selector { 
+            position: absolute; top: 15px; left: 15px; z-index: 10; 
+            padding: 12px 16px; border-radius: 8px; border: none; 
+            font-size: 14px; font-weight: bold; background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer;
         }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            margin: 0;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .nav-bar {
-            text-align: center;
-            margin-bottom: 25px;
-        }
-
-        .nav-link {
-            color: #007aff;
-            text-decoration: none;
-            font-weight: bold;
-            font-size: 16px;
-            padding: 8px 16px;
-            border: 2px solid #007aff;
-            border-radius: 20px;
-            transition: all 0.2s ease;
-        }
-
-        .nav-link:hover {
-            background-color: #007aff;
-            color: white;
-        }
-
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        select {
-            flex-grow: 1;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #ccc;
-            font-size: 16px;
-            background-color: var(--card-bg);
-            cursor: pointer;
-        }
-
-        .refresh-btn {
-            padding: 12px 20px;
-            border-radius: 8px;
-            border: none;
-            background-color: #007aff;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .refresh-btn:disabled {
-            background-color: #aaa;
-        }
-
-        .ride-list {
-            display: grid;
-            gap: 12px;
-        }
-
-        .ride-card {
-            background: var(--card-bg);
-            padding: 16px;
-            border-radius: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-
-        .ride-name {
-            font-weight: 600;
-            font-size: 16px;
-            padding-right: 10px;
-        }
-
+        /* Wait Time Badge Pills */
         .wait-badge {
-            padding: 6px 12px;
-            border-radius: 20px;
-            color: white;
-            font-weight: bold;
-            font-size: 14px;
-            white-space: nowrap;
+            background: #ffffff; border-radius: 20px; color: #fff; font-weight: 800;
+            padding: 6px 12px; font-size: 13px; text-align: center; border: 2px solid white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2); cursor: pointer; transition: transform 0.2s;
         }
-
-        .wait-green { background-color: var(--status-green); }
-        .wait-yellow { background-color: var(--status-yellow); }
-        .wait-red { background-color: var(--status-red); }
-        .wait-closed { background-color: #666666; }
-
-        .loading {
-            text-align: center;
-            font-style: italic;
-            color: #666;
-            padding: 40px;
-        }
+        .wait-badge:hover { transform: scale(1.15); }
+        
+        /* Color Rules */
+        .status-low { background-color: #10B981; }     /* Green (Under 15m) */
+        .status-medium { background-color: #F59E0B; }  /* Yellow (16-30m) */
+        .status-high { background-color: #EF4444; }    /* Red (31m+) */
+        .status-closed { background-color: #6B7280; }  /* Grey (Closed/Down) */
     </style>
 </head>
 <body>
 
-<div class="container">
-    <header>
-        <h1>Orlando Live Status</h1>
-    </header>
+<select id="park-selector">
+    <option value="-81.4684,28.4794">🌎 Universal Studios Florida</option>
+    <option value="-81.4743,28.4715">🦖 Islands of Adventure</option>
+    <option value="-81.5812,28.4177">🏰 Magic Kingdom</option>
+    <option value="-81.5494,28.3747">🌐 Epcot</option>
+    <option value="-81.5583,28.3575">🎬 Hollywood Studios</option>
+    <option value="-81.5907,28.3529">🌳 Animal Kingdom</option>
+</select>
 
-    <div class="nav-bar">
-        <a href="map.html" class="nav-link">Switch to Interactive Map View →</a>
-    </div>
-
-    <div class="controls">
-        <select id="parkSelector">
-            <option value="75ea578a-adc8-4116-a54d-dccb60765ef9">Magic Kingdom</option>
-            <option value="47f90d2c-e191-4239-a466-5892ef59a88b">EPCOT</option>
-            <option value="288747d1-8b4f-4a64-867e-ea7c9b27bad8">Hollywood Studios</option>
-            <option value="1c84a229-8862-4648-9c71-378ddd2c7693">Animal Kingdom</option>
-            <option value="eb3f4560-2383-4a36-9152-6b3e5ed6bc57">Universal Studios Florida</option>
-            <option value="267615cc-8943-4c2a-ae2c-5da728ca591f">Islands of Adventure</option>
-            <option value="12dbb85b-265f-44e6-bccf-f1faa17211fc">Epic Universe</option>
-        </select>
-        <button class="refresh-btn" id="refreshBtn">Sync</button>
-    </div>
-
-    <div id="displayArea" class="ride-list">
-        </div>
-</div>
+<div id="map"></div>
 
 <script>
-    const parkSelector = document.getElementById('parkSelector');
-    const refreshBtn = document.getElementById('refreshBtn');
-    const displayArea = document.getElementById('displayArea');
+    // ⚠️ PASTE YOUR ACCESS TOKEN EXACTLY BETWEEN THE SINGLE QUOTES BELOW:
+    mapboxgl.accessToken = 'pk.eyJ1IjoiYmVub2Jpd2FuIiwiYSI6ImNqZ1IvaGxjbDA1d2Myd3MwcTRkYWQ0b3MiFQ.uRr3IHyBhpntzFb5WRuX4Q';
 
-    async function fetchWaitTimes() {
-        const parkId = parkSelector.value;
-        displayArea.innerHTML = '<div class="loading">Fetching live data from the queue...</div>';
-        refreshBtn.disabled = true;
+    // The list of target destination IDs mapping to the ThemeParks API
+    const PARKS = [
+        { id: "75ea578a-adc8-4116-a54d-dccb60765ef9", name: "Magic Kingdom" },
+        { id: "47f90d1c-e7a9-4cb2-bc42-8842274ea0a7", name: "Epcot" },
+        { id: "28b403dc-352b-4ec7-9ca2-8951da6697b9", name: "Hollywood Studios" },
+        { id: "1c36238c-28ee-47d9-a9a3-5ebf26037e5c", name: "Animal Kingdom" },
+        { id: "75f31ca0-9d0d-44a6-995a-fb80df96b864", name: "Universal Studios Florida" },
+        { id: "2c17dec8-1ed1-4fd8-b6ce-b118747444b0", name: "Islands of Adventure" }
+    ];
 
+    // Initialize your Mapbox engine framework
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/benobiwan/cmrbf7zfr002301ry71sq3868', // Your custom design link!
+        center: [-81.4684, 28.4794], // Starts focused at Universal Studios Florida
+        zoom: 15.5,
+        pitch: 45
+    });
+
+    let activeMarkers = [];
+
+    // Async engine to request live park queues and generate interface badges
+    async function updateMapData() {
         try {
-            const response = await fetch(`https://api.themeparks.wiki/v1/entity/${parkId}/live`);
-            if (!response.ok) throw new Error('Network issue fetching live feeds');
+            // Fetch wait times for all defined properties in parallel loops
+            const requests = PARKS.map(park => fetch(`https://api.themeparks.wiki/v1/entity/${park.id}/live`).then(res => res.json()));
+            const results = await Promise.all(requests);
             
-            const result = await response.json();
-            const liveData = result.liveData || [];
-            const rides = liveData.filter(item => item.entityType === "ATTRACTION");
+            // Clean out yesterday's/last cycle's markers before re-drawing
+            activeMarkers.forEach(m => m.remove());
+            activeMarkers = [];
 
-            if (rides.length === 0) {
-                displayArea.innerHTML = '<div class="loading">No active rides reported right now.</div>';
-                return;
-            }
+            // Read through the data packages
+            results.forEach((data, index) => {
+                if (!data || !data.liveData) return;
+                const parkName = PARKS[index].name;
 
-            rides.sort((a, b) => a.name.localeCompare(b.name));
+                // Process the live data feeds
+                data.liveData.forEach(ride => {
+                    // Check if the individual ride has geographic layout markers mapping
+                    if (ride.location && ride.location.longitude && ride.location.latitude) {
+                        
+                        // Construct the physical DOM component element node
+                        const el = document.createElement('div');
+                        el.className = 'wait-badge';
 
-            displayArea.innerHTML = rides.map(ride => {
-                const isOperating = ride.status === "OPERATING";
-                const waitTime = ride.queue?.STANDBY?.waitTime; 
-                
-                let badgeClass = 'wait-closed';
-                let label = ride.status || 'CLOSED';
+                        if (ride.status === "CLOSED" || ride.status === "DOWN") {
+                            el.innerText = "✕";
+                            el.classList.add('status-closed');
+                        } else {
+                            const wait = ride.queue?.STANDBY?.waitTime ?? 0;
+                            el.innerText = `${wait}m`;
+                            
+                            // Appends color styles based on custom preferences rules
+                            if (wait <= 15) el.classList.add('status-low');       // Green (0-15m)
+                            else if (wait <= 30) el.classList.add('status-medium'); // Yellow (16-30m)
+                            else el.classList.add('status-high');                    // Red (31m+)
+                        }
 
-                if (isOperating && waitTime !== undefined && waitTime !== null) {
-                    label = `${waitTime} min`;
-                    if (waitTime <= 15) badgeClass = 'wait-green';
-                    else if (waitTime <= 30) badgeClass = 'wait-yellow';
-                    else badgeClass = 'wait-red';
-                } else if (ride.status === "DOWN") {
-                    label = "DOWN";
-                    badgeClass = 'wait-red';
-                }
+                        // Attach an interactive descriptive card panel overlay
+                        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                            <div style="padding: 2px; font-family: system-ui, sans-serif;">
+                                <strong style="color:#6B7280; font-size:10px; display:block; text-transform:uppercase;">${parkName}</strong>
+                                <b style="font-size:14px; color:#1F2937; display:block; margin-top:2px;">${ride.name}</b>
+                                <span style="font-size:12px; display:block; margin-top:4px;">Status: <strong>${ride.status}</strong></span>
+                            </div>
+                        `);
 
-                return `
-                    <div class="ride-card">
-                        <span class="ride-name">${ride.name}</span>
-                        <span class="wait-badge ${badgeClass}">${label}</span>
-                    </div>
-                `;
-            }).join('');
+                        // Formulate the placement position on the Mapbox coordinate layer grid
+                        const marker = new mapboxgl.Marker(el)
+                            .setLngLat([ride.location.longitude, ride.location.latitude])
+                            .setPopup(popup)
+                            .addTo(map);
 
-        } catch (error) {
-            console.error(error);
-            displayArea.innerHTML = '<div class="loading" style="color: var(--status-red);">Error loading wait times. Please try again.</div>';
-        } finally {
-            refreshBtn.disabled = false;
+                        activeMarkers.push(marker);
+                    }
+                });
+            });
+            console.log("🎯 Live park markers updated successfully.");
+        } catch (e) { 
+            console.error("Error synchronizing active wait time arrays:", e); 
         }
     }
 
-    parkSelector.addEventListener('change', fetchWaitTimes);
-    refreshBtn.addEventListener('click', fetchWaitTimes);
+    // Wait until Mapbox completes painting custom layer styles before executing data scripts
+    map.on('load', () => {
+        updateMapData();
+        setInterval(updateMapData, 120000); // Automate Background Updating cycles every 2 minutes
+    });
 
-    // Initial launch load
-    fetchWaitTimes();
+    // Event hooks allowing the selector drop down menu to glide the camera view between parks
+    document.getElementById('park-selector').addEventListener('change', (e) => {
+        const coords = e.target.value.split(',').map(Number);
+        map.flyTo({ 
+            center: coords, 
+            zoom: 15.5, 
+            duration: 2200, 
+            pitch: 45,
+            essential: true 
+        });
+    });
 </script>
-
 </body>
 </html>
