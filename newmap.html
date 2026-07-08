@@ -2,141 +2,143 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Orlando Theme Park Wait Times Map</title>
+    <title>Orlando Theme Park Map</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
     
-    <!-- FIXED: Bypasses network blocks by embedding Leaflet styles and code as local Data URLs -->
-    <link rel="stylesheet" href="data:text/css;base64,LmxlYWZsZXQtY29udGFpbmVye2ZvbnQtZmFtaWx5OiJIZWx2ZXRpY2EgTmV1ZSIsQXJpYWwsSGVsdmV0aWNhLHNhbnMtc2VyaWY7Zm9udC1zaXplOjEycHg7YmFja2dyb3VuZDojZmZmO2NvbG9yOiMwMDB9LmxlYWZsZXQtaW50ZXJhY3RpdmV7Y3Vyc29yOnBvaW50ZXJ9" />
-    <script src="https://cloudflare.com" crossorigin="anonymous"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css" rel="stylesheet">
     
     <style>
-        html, body { 
-            margin: 0; 
-            padding: 0; 
-            width: 100%; 
-            height: 100%; 
-            overflow: hidden;
-            font-family: sans-serif; 
+        body { margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        /* Dropdown Selector Menu */
+        #park-selector { 
+            position: absolute; top: 15px; left: 15px; z-index: 10; 
+            padding: 12px; border-radius: 8px; border: none; 
+            font-size: 14px; font-weight: bold; background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer;
         }
-        #map { 
-            width: 100%; 
-            height: 100%; 
-            background-color: #aad3df; 
+
+        /* Wait Time Badge Styling */
+        .wait-badge {
+            background: #ffffff; border-radius: 20px; color: #fff; font-weight: 800;
+            padding: 6px 12px; font-size: 13px; text-align: center; border: 2px solid white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2); cursor: pointer; transition: transform 0.2s;
         }
-        .wait-label { font-weight: bold; text-align: center; color: #000; }
-        #debug-panel {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            background: rgba(0,0,0,0.85);
-            color: #00ff00;
-            padding: 10px;
-            border-radius: 5px;
-            font-family: monospace;
-            font-size: 11px;
-            max-width: 300px;
-            z-index: 1000;
-            pointer-events: none;
-        }
+        .wait-badge:hover { transform: scale(1.15); }
+        
+        /* Badge Colors */
+        .status-low { background-color: #10B981; }     /* Green (0-15m) */
+        .status-medium { background-color: #F59E0B; }  /* Yellow (16-35m) */
+        .status-high { background-color: #EF4444; }    /* Red (36m+) */
+        .status-closed { background-color: #6B7280; }  /* Grey (Closed/Down) */
     </style>
 </head>
 <body>
 
-    <div id="map"></div>
-    <div id="debug-panel">Status: Page loading...</div>
+<select id="park-selector">
+    <option value="-81.4684,28.4794">🌎 Universal Studios Florida</option>
+    <option value="-81.4743,28.4715">🦖 Islands of Adventure</option>
+    <option value="-81.5812,28.4177">🏰 Magic Kingdom</option>
+    <option value="-81.5494,28.3747">🌐 Epcot</option>
+    <option value="-81.5583,28.3575">🎬 Hollywood Studios</option>
+    <option value="-81.5907,28.3529">🌳 Animal Kingdom</option>
+</select>
 
-    <script>
-        const debugEl = document.getElementById('debug-panel');
-        function logStatus(msg, isError = false) { 
-            debugEl.innerHTML = "Status: " + msg; 
-            if(isError) debugEl.style.color = "#ff3333";
-            console.log(msg); 
-        }
+<div id="map"></div>
 
-        window.onload = function() {
-            // Ultimate fallback check
-            if (typeof L === 'undefined') {
-                logStatus("Leaflet script engine is strictly blocked by local security settings. Please copy this file and test it inside a different web browser app (like Google Chrome or Safari).", true);
-                return;
-            }
+<script>
+    // ⚠️ REPLACE THIS STRING WITH YOUR ACTUAL PUBLIC MAPBOX TOKEN
+    mapboxgl.accessToken = 'YOUR_MAPBOX_PUBLIC_TOKEN_HERE';
 
-            try {
-                logStatus("Initializing map viewport...");
-                // Setting up map directly using coordinates
-                const map = L.map('map').setView([28.4176, -81.5812], 13);
+    // The list of parks we want to fetch from the API
+    const PARKS = [
+        { id: "75ea578a-adc8-4116-a54d-dccb60765ef9", name: "Magic Kingdom" },
+        { id: "47f90d1c-e7a9-4cb2-bc42-8842274ea0a7", name: "Epcot" },
+        { id: "28b403dc-352b-4ec7-9ca2-8951da6697b9", name: "Hollywood Studios" },
+        { id: "1c36238c-28ee-47d9-a9a3-5ebf26037e5c", name: "Animal Kingdom" },
+        { id: "75f31ca0-9d0d-44a6-995a-fb80df96b864", name: "Universal Studios Florida" },
+        { id: "2c17dec8-1ed1-4fd8-b6ce-b118747444b0", name: "Islands of Adventure" }
+    ];
 
-                logStatus("Loading base map tiles...");
-                L.tileLayer('https://{s}://{z}/{x}/{y}{r}.png', {
-                    maxZoom: 19,
-                    attribution: '© OpenStreetMap'
-                }).addTo(map);
+    // Initialize your custom map style
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/benobiwan/cmrbf7zfr002301ry71sq3868', // Your style!
+        center: [-81.4684, 28.4794], // Start at Universal Studios
+        zoom: 15.5,
+        pitch: 45
+    });
 
-                const ridesDatabase = [
-                    { name: "Space Mountain", lat: 28.4192, lon: -81.5771, parkId: 6, apiId: 472 },
-                    { name: "Seven Dwarfs Mine Train", lat: 28.4202, lon: -81.5803, parkId: 6, apiId: 473 },
-                    { name: "Big Thunder Mountain", lat: 28.4211, lon: -81.5847, parkId: 6, apiId: 466 },
-                    { name: "Guardians of the Galaxy", lat: 28.3748, lon: -81.5501, parkId: 5, apiId: 16183 },
-                    { name: "Hagrid's Motorbike Adventure", lat: 28.4728, lon: -81.4711, parkId: 64, apiId: 4578 },
-                    { name: "VelociCoaster", lat: 28.4721, lon: -81.4729, parkId: 64, apiId: 15335 }
-                ];
+    let activeMarkers = [];
 
-                async function loadWaitTimes() {
-                    logStatus("Connecting to live API proxy...");
-                    const uniqueParkIds = [...new Set(ridesDatabase.map(ride => ride.parkId))];
-                    const liveData = {};
+    // The core function that grabs data and draws it
+    async function updateMapData() {
+        try {
+            // Fetch everything at once
+            const requests = PARKS.map(park => fetch(`https://api.themeparks.wiki/v1/entity/${park.id}/live`).then(res => res.json()));
+            const results = await Promise.all(requests);
+            
+            // Clear last cycle's markers
+            activeMarkers.forEach(m => m.remove());
+            activeMarkers = [];
 
-                    for (const parkId of uniqueParkIds) {
-                        try {
-                            const targetUrl = `https://queue-times.com{parkId}/queue_times.json`;
-                            const response = await fetch(`https://corsproxy.io{encodeURIComponent(targetUrl)}`);
-                            
-                            if (!response.ok) throw new Error("Network response failed");
-                            const data = await response.json();
-                            
-                            if (data && data.lands) {
-                                data.lands.forEach(land => {
-                                    land.rides.forEach(ride => {
-                                        liveData[ride.id] = {
-                                            waitTime: ride.wait_time,
-                                            isOpen: ride.is_open
-                                        };
-                                    });
-                                });
-                            }
-                        } catch (error) {
-                            logStatus("API block detected - Plotting positions without live times.");
-                            console.error(error);
-                        }
-                    }
+            // Loop through each park's results
+            results.forEach((data, index) => {
+                if (!data || !data.liveData) return;
+                const parkName = PARKS[index].name;
 
-                    logStatus("Plotting markers on map...");
-                    ridesDatabase.forEach(ride => {
-                        const liveRide = liveData[ride.apiId];
-                        let statusText = "No live data available";
+                data.liveData.forEach(ride => {
+                    // Make sure the ride has map coordinates
+                    if (ride.location && ride.location.longitude && ride.location.latitude) {
                         
-                        if (liveRide) {
-                            statusText = liveRide.isOpen ? `${liveRide.waitTime} mins` : "Closed";
+                        // Create the HTML element for the marker
+                        const el = document.createElement('div');
+                        el.className = 'wait-badge';
+
+                        if (ride.status === "CLOSED" || ride.status === "DOWN") {
+                            el.innerText = "✕";
+                            el.classList.add('status-closed');
+                        } else {
+                            const wait = ride.queue?.STANDBY?.waitTime ?? 0;
+                            el.innerText = `${wait}m`;
+                            
+                            if (wait <= 15) el.classList.add('status-low');
+                            else if (wait <= 35) el.classList.add('status-medium');
+                            else el.classList.add('status-high');
                         }
 
-                        const marker = L.marker([ride.lat, ride.lon]).addTo(map);
-                        marker.bindPopup(`
-                            <div class="wait-label">
-                                <h3>${ride.name}</h3>
-                                <p><strong>Status:</strong> ${statusText}</p>
-                            </div>
+                        // Create a click popup
+                        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                            <strong style="color:#6B7280; font-size:10px; display:block;">${parkName}</strong>
+                            <b style="font-size:14px; color:#1F2937;">${ride.name}</b>
                         `);
-                    });
 
-                    logStatus("Map fully loaded! Click the pins to verify.");
-                }
+                        // Drop it on the map!
+                        const marker = new mapboxgl.Marker(el)
+                            .setLngLat([ride.location.longitude, ride.location.latitude])
+                            .setPopup(popup)
+                            .addTo(map);
 
-                loadWaitTimes();
-                setTimeout(() => { map.invalidateSize(); }, 300);
+                        activeMarkers.push(marker);
+                    }
+                });
+            });
+        } catch (e) { console.error("Error updating wait times:", e); }
+    }
 
-            } catch(e) {
-                logStatus("Fatal crash: " + e.message, true);
-            }
-        };
-    </script>
+    // Run the script when the map loads
+    map.on('load', () => {
+        updateMapData();
+        setInterval(updateMapData, 120000); // Auto-update every 2 minutes
+    });
+
+    // Make the dropdown menu fly the camera around
+    document.getElementById('park-selector').addEventListener('change', (e) => {
+        const coords = e.target.value.split(',').map(Number);
+        map.flyTo({ center: coords, zoom: 15.5, duration: 2000, pitch: 45 });
+    });
+</script>
 </body>
 </html>
